@@ -3,12 +3,12 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import aioboto3
 from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import BaseModel
 
 from app.core.config import settings
 from app.services.event_archive import archive_published_event
+from app.storage.aws_session import client_kwargs, get_session
 
 logger = logging.getLogger(__name__)
 
@@ -18,19 +18,9 @@ EVENT_TYPE_ATTRIBUTE = "event_type"
 
 class EventPublisher:
     def __init__(self) -> None:
-        self._session = (
-            aioboto3.Session(profile_name=settings.aws_profile)
-            if settings.aws_profile
-            else aioboto3.Session()
-        )
+        self._session = get_session()
         self._client_cm = None
         self._sns = None
-
-    def _client_kwargs(self) -> dict[str, Any]:
-        kwargs: dict[str, Any] = {"region_name": settings.aws_region}
-        if settings.aws_endpoint_url:
-            kwargs["endpoint_url"] = settings.aws_endpoint_url
-        return kwargs
 
     async def connect(self) -> None:
         if self._sns is not None:
@@ -40,7 +30,7 @@ class EventPublisher:
                 "SNS_TOPIC_ARN no configurado. Ejecuta scripts/provision_sns_sqs.sh "
                 "y copia las variables a .env"
             )
-        self._client_cm = self._session.client("sns", **self._client_kwargs())
+        self._client_cm = self._session.client("sns", **client_kwargs())
         self._sns = await self._client_cm.__aenter__()
         await self._sns.get_topic_attributes(TopicArn=settings.sns_topic_arn)
         logger.info("SNS conectado: %s", settings.sns_topic_arn)

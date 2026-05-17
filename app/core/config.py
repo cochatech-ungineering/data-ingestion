@@ -10,23 +10,19 @@ class Settings(BaseSettings):
     archive_published_events: bool = True
     events_output_dir: str = "events/published"
 
-    # AWS SNS (equivalente al exchange topic cashback.ingestion)
     aws_region: str = "us-east-1"
-    aws_profile: str | None = None  # p. ej. cochatech-dev (aws login / ~/.aws/credentials)
-    aws_endpoint_url: str | None = None  # p. ej. http://localhost:4566 para LocalStack
+    aws_profile: str | None = None
+    aws_endpoint_url: str | None = None
+
     sns_topic_arn: str = ""
     sns_topic_name: str = "cashback-ingestion"
 
-    database_url: str = "postgresql://ingestion:ingestion@localhost:5433/ingestion"
+    s3_bucket: str = "cochatech-data-ingestion-raw-545349726305"
+
+    database_url: str = ""
+    database_ssl_ca: str = "infrastructure/rds-ca-global.pem"
     database_pool_min_size: int = 1
     database_pool_max_size: int = 10
-
-    minio_endpoint: str = "localhost:9000"
-    minio_access_key: str = "minioadmin"
-    minio_secret_key: str = "minioadmin"
-    minio_bucket: str = "ingestion-raw"
-    minio_secure: bool = False
-    minio_region: str | None = None
 
 
 settings = Settings()

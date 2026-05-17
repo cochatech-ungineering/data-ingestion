@@ -111,7 +111,7 @@ async def ingest_transfers(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.post("/demo", summary="Procesar los CSV de ejemplo en /data (sin MinIO)")
+@router.post("/demo", summary="Procesar los CSV de ejemplo en /data (sin S3)")
 async def ingest_demo_data(
     file_type: FileType = Query(FileType.QR_PAYMENTS),
     publish: bool = Query(True),

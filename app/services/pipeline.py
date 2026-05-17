@@ -12,7 +12,7 @@ from app.schemas.contracts import FileType, IngestionResponse
 from app.services.file_converter import materialize_as_csv, media_type_for_extension, validate_upload_filename
 from app.services.ingest import ingest_qr_file, ingest_transfers_file
 from app.services.validators import QrStatusValidationError
-from app.storage.minio_storage import raw_file_storage
+from app.storage.s3_storage import raw_file_storage
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ class IngestionPipeline:
         )
 
         try:
-            raw_file_storage.upload_bytes(
+            await raw_file_storage.upload_bytes(
                 object_key=object_key,
                 data=data,
                 content_type=job.media_type,
@@ -128,7 +128,9 @@ class IngestionPipeline:
             suffix = Path(job.original_filename).suffix or ".bin"
             with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                 raw_path = Path(tmp.name)
-            raw_file_storage.download_to_path(object_key=job.minio_object_key, destination=raw_path)
+            await raw_file_storage.download_to_path(
+                object_key=job.minio_object_key, destination=raw_path
+            )
 
             current_stage = IngestionJobStatus.CONVERTING
             job = await self._repo.update_status(job.id, current_stage)

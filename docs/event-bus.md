@@ -8,7 +8,7 @@ CSV → API de ingesta → limpieza (Polars) → SNS topic → SQS (por consumid
 
 Este servicio es **productor único**. Publica en un **topic SNS** en AWS; cada consumidor tiene su **cola SQS** con filtro por tipo de evento.
 
-No hay broker local (ni RabbitMQ, ni Kafka, ni LocalStack). Solo `postgres` + `minio` en Docker para datos.
+No hay infra local: datos en **S3 + RDS**, eventos en **SNS/SQS** (AWS).
 
 ## Mapeo desde RabbitMQ
 

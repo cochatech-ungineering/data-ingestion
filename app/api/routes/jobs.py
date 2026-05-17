@@ -21,7 +21,7 @@ async def get_job(job_id: UUID):
     return job_to_response(job)
 
 
-@router.post("/{job_id}/retry", summary="Reintentar ingesta fallida desde MinIO")
+@router.post("/{job_id}/retry", summary="Reintentar ingesta fallida desde S3")
 async def retry_job(
     job_id: UUID,
     publish: bool = Query(True, description="Publicar eventos en SNS"),

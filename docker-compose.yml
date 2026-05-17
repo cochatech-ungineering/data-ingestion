@@ -1,36 +1,5 @@
-# Solo infra local de datos (archivos + estado). El bus de eventos es AWS SNS/SQS.
-services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: data-ingestion-postgres
-    ports:
-      - "5433:5432"
-    environment:
-      POSTGRES_USER: ingestion
-      POSTGRES_PASSWORD: ingestion
-      POSTGRES_DB: ingestion
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./migrations/001_ingestion_jobs.sql:/docker-entrypoint-initdb.d/001_ingestion_jobs.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ingestion -d ingestion"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+# Infraestructura de datos en AWS (S3 + RDS). Sin servicios locales.
+# Mensajería: SNS/SQS (scripts/provision_sns_sqs.sh)
+# Datos: S3 + RDS (scripts/provision_aws_data.sh)
 
-  minio:
-    image: minio/minio:latest
-    container_name: data-ingestion-minio
-    command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    volumes:
-      - minio_data:/data
-
-volumes:
-  postgres_data:
-  minio_data:
+services: {}
