@@ -1,148 +1,174 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
-# Deploy data-ingestion to ECS Fargate
-# Run from project root with access to account 545349726305
+# Despliega data-ingestion en ECS Fargate (ECR + RDS + S3 + SNS).
+# Uso: AWS_PROFILE=cochatech-dev ./infrastructure/deploy.sh
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
 
 ACCOUNT_ID="545349726305"
-REGION="us-east-1"
+REGION="${AWS_REGION:-us-east-1}"
+PROFILE="${AWS_PROFILE:-cochatech-dev}"
 REPO_NAME="data-ingestion"
 CLUSTER_NAME="data-ingestion"
 SERVICE_NAME="data-ingestion"
+S3_BUCKET="cochatech-data-ingestion-raw-${ACCOUNT_ID}"
+RDS_SG_ID="${RDS_SECURITY_GROUP_ID:-sg-055ee671916a28e68}"
+ECS_SG_NAME="data-ingestion-ecs-sg"
 IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${REPO_NAME}:latest"
+SECRET_DB_ARN="arn:aws:secretsmanager:${REGION}:${ACCOUNT_ID}:secret:data-ingestion/database-url-9UUn4x"
 
-echo "=== Step 1: Create ECR Repository ==="
-aws ecr create-repository \
-  --repository-name "${REPO_NAME}" \
-  --region "${REGION}" \
-  --image-scanning-configuration scanOnPush=true \
-  2>/dev/null || echo "Repository already exists"
+export AWS_PROFILE="$PROFILE"
+export AWS_DEFAULT_REGION="$REGION"
+aws() { command aws "$@"; }
 
-echo "=== Step 2: Login to ECR ==="
-aws ecr get-login-password --region "${REGION}" | \
-  docker login --username AWS --password-stdin "${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
+echo "==> Perfil: $PROFILE | Región: $REGION"
 
-echo "=== Step 3: Build and Push Image ==="
-docker build -t "${REPO_NAME}:latest" .
-docker tag "${REPO_NAME}:latest" "${IMAGE_URI}"
-docker push "${IMAGE_URI}"
+# --- Secret DATABASE_URL ---
+if [[ ! -f infrastructure/rds-master-password.txt ]]; then
+  echo "Falta infrastructure/rds-master-password.txt"
+  exit 1
+fi
+DB_PASS=$(tr -d '\n' < infrastructure/rds-master-password.txt)
+DB_HOST=$(aws rds describe-db-instances --db-instance-identifier data-ingestion-postgres \
+  --query 'DBInstances[0].Endpoint.Address' --output text)
+ENCODED_PASS=$(python3 -c "import urllib.parse; print(urllib.parse.quote('''$DB_PASS''', safe=''))")
+DATABASE_URL="postgresql://ingestion:${ENCODED_PASS}@${DB_HOST}:5432/ingestion?sslmode=require"
 
-echo "=== Step 4: Create CloudWatch Log Group ==="
-aws logs create-log-group \
-  --log-group-name "/ecs/data-ingestion" \
-  --region "${REGION}" \
-  2>/dev/null || echo "Log group already exists"
+echo "==> Actualizando secret data-ingestion/database-url"
+aws secretsmanager put-secret-value \
+  --secret-id "$SECRET_DB_ARN" \
+  --secret-string "$DATABASE_URL" >/dev/null
 
-echo "=== Step 5: Create IAM Execution Role ==="
-aws iam create-role \
-  --role-name "ecsTaskExecutionRole" \
-  --assume-role-policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [{
-      "Effect": "Allow",
-      "Principal": {"Service": "ecs-tasks.amazonaws.com"},
-      "Action": "sts:AssumeRole"
-    }]
-  }' 2>/dev/null || echo "Execution role already exists"
-
-aws iam attach-role-policy \
-  --role-name "ecsTaskExecutionRole" \
-  --policy-arn "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy" \
-  2>/dev/null || true
-
-# Allow execution role to read secrets
-aws iam put-role-policy \
-  --role-name "ecsTaskExecutionRole" \
-  --policy-name "SecretsManagerRead" \
-  --policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [{
-      "Effect": "Allow",
-      "Action": ["secretsmanager:GetSecretValue"],
-      "Resource": "arn:aws:secretsmanager:us-east-1:545349726305:secret:data-ingestion/*"
-    }]
-  }'
-
-echo "=== Step 6: Create IAM Task Role ==="
-aws iam create-role \
-  --role-name "data-ingestion-task-role" \
-  --assume-role-policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [{
-      "Effect": "Allow",
-      "Principal": {"Service": "ecs-tasks.amazonaws.com"},
-      "Action": "sts:AssumeRole"
-    }]
-  }' 2>/dev/null || echo "Task role already exists"
-
+# --- IAM task role (S3 + SNS vía rol, sin access keys) ---
+echo "==> IAM task role"
 aws iam put-role-policy \
   --role-name "data-ingestion-task-role" \
   --policy-name "DataIngestionPermissions" \
-  --policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [
+  --policy-document "{
+    \"Version\": \"2012-10-17\",
+    \"Statement\": [
       {
-        "Effect": "Allow",
-        "Action": ["sns:Publish"],
-        "Resource": "arn:aws:sns:us-east-1:545349726305:cashback-ingestion"
+        \"Effect\": \"Allow\",
+        \"Action\": [\"sns:Publish\"],
+        \"Resource\": \"arn:aws:sns:${REGION}:${ACCOUNT_ID}:cashback-ingestion\"
       },
       {
-        "Effect": "Allow",
-        "Action": ["s3:PutObject", "s3:GetObject", "s3:ListBucket"],
-        "Resource": [
-          "arn:aws:s3:::ingestion-raw",
-          "arn:aws:s3:::ingestion-raw/*"
+        \"Effect\": \"Allow\",
+        \"Action\": [
+          \"s3:PutObject\", \"s3:GetObject\", \"s3:DeleteObject\",
+          \"s3:ListBucket\", \"s3:HeadBucket\", \"s3:CreateBucket\"
+        ],
+        \"Resource\": [
+          \"arn:aws:s3:::${S3_BUCKET}\",
+          \"arn:aws:s3:::${S3_BUCKET}/*\"
         ]
       }
     ]
-  }'
+  }" >/dev/null
 
-echo "=== Step 7: Create Secrets (update values as needed) ==="
-aws secretsmanager create-secret \
-  --name "data-ingestion/database-url" \
-  --secret-string "postgresql://ingestion:CHANGE_ME@your-aurora-endpoint:5432/ingestion" \
-  --region "${REGION}" \
-  2>/dev/null || echo "Secret already exists — update with: aws secretsmanager put-secret-value ..."
+# --- ECR build & push ---
+echo "==> ECR login y push imagen"
+aws ecr get-login-password --region "$REGION" | \
+  docker login --username AWS --password-stdin "${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
+docker build -t "${REPO_NAME}:latest" .
+docker tag "${REPO_NAME}:latest" "$IMAGE_URI"
+docker push "$IMAGE_URI"
 
-aws secretsmanager create-secret \
-  --name "data-ingestion/s3-access-key" \
-  --secret-string "CHANGE_ME" \
-  --region "${REGION}" \
-  2>/dev/null || echo "Secret already exists"
+aws logs create-log-group --log-group-name "/ecs/data-ingestion" --region "$REGION" 2>/dev/null || true
 
-aws secretsmanager create-secret \
-  --name "data-ingestion/s3-secret-key" \
-  --secret-string "CHANGE_ME" \
-  --region "${REGION}" \
-  2>/dev/null || echo "Secret already exists"
+# --- Security group ECS ---
+VPC_ID=$(aws ec2 describe-vpcs --filters Name=isDefault,Values=true \
+  --query 'Vpcs[0].VpcId' --output text)
+ECS_SG_ID=$(aws ec2 describe-security-groups \
+  --filters "Name=group-name,Values=$ECS_SG_NAME" "Name=vpc-id,Values=$VPC_ID" \
+  --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || true)
+if [[ -z "$ECS_SG_ID" || "$ECS_SG_ID" == "None" ]]; then
+  ECS_SG_ID=$(aws ec2 create-security-group \
+    --group-name "$ECS_SG_NAME" \
+    --description "ECS Fargate data-ingestion API" \
+    --vpc-id "$VPC_ID" \
+    --query GroupId --output text)
+  aws ec2 authorize-security-group-ingress \
+    --group-id "$ECS_SG_ID" --protocol tcp --port 8000 --cidr 0.0.0.0/0
+  echo "    SG ECS creado: $ECS_SG_ID"
+else
+  echo "    SG ECS existente: $ECS_SG_ID"
+fi
 
-echo "=== Step 8: Register Task Definition ==="
+# RDS: permitir Postgres desde tasks ECS
+echo "==> Regla RDS (5432 desde $ECS_SG_ID)"
+aws ec2 authorize-security-group-ingress \
+  --group-id "$RDS_SG_ID" \
+  --protocol tcp --port 5432 \
+  --source-group "$ECS_SG_ID" 2>/dev/null || echo "    Regla RDS ya existe o no aplicable"
+
+SUBNETS=$(aws ec2 describe-subnets \
+  --filters "Name=vpc-id,Values=$VPC_ID" \
+  --query 'Subnets[*].SubnetId' --output text | tr '\t' ',')
+# Usar hasta 2 subnets en AZ distintas
+SUBNET_LIST=$(echo "$SUBNETS" | tr ',' '\n' | head -2 | paste -sd,)
+
+echo "==> Registrar task definition"
 aws ecs register-task-definition \
   --cli-input-json file://infrastructure/ecs-task-definition.json \
-  --region "${REGION}"
+  --region "$REGION" >/dev/null
 
-echo "=== Step 9: Create ECS Cluster ==="
-aws ecs create-cluster \
-  --cluster-name "${CLUSTER_NAME}" \
-  --region "${REGION}" \
-  2>/dev/null || echo "Cluster already exists"
+aws ecs create-cluster --cluster-name "$CLUSTER_NAME" --region "$REGION" 2>/dev/null || true
 
-echo "=== Step 10: Create ECS Service ==="
-echo ""
-echo "⚠️  Before creating the service, you need:"
-echo "  1. A VPC with subnets (use default VPC or create one)"
-echo "  2. A security group allowing inbound on port 8000"
-echo ""
-echo "Run this after setting SUBNET_IDS and SG_ID:"
-echo ""
-echo "  aws ecs create-service \\"
-echo "    --cluster ${CLUSTER_NAME} \\"
-echo "    --service-name ${SERVICE_NAME} \\"
-echo "    --task-definition data-ingestion \\"
-echo "    --desired-count 1 \\"
-echo "    --launch-type FARGATE \\"
-echo "    --network-configuration 'awsvpcConfiguration={subnets=[SUBNET_ID_1,SUBNET_ID_2],securityGroups=[SG_ID],assignPublicIp=ENABLED}' \\"
-echo "    --region ${REGION}"
-echo ""
-echo "=== Done! ==="
-echo "Image pushed to: ${IMAGE_URI}"
+SERVICE_EXISTS=$(aws ecs describe-services \
+  --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME" \
+  --query 'services[?status==`ACTIVE`].serviceName' --output text 2>/dev/null || true)
+
+if [[ -z "$SERVICE_EXISTS" ]]; then
+  echo "==> Crear servicio ECS"
+  aws ecs create-service \
+    --cluster "$CLUSTER_NAME" \
+    --service-name "$SERVICE_NAME" \
+    --task-definition data-ingestion \
+    --desired-count 1 \
+    --launch-type FARGATE \
+    --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_LIST],securityGroups=[$ECS_SG_ID],assignPublicIp=ENABLED}" \
+    --region "$REGION" >/dev/null
+else
+  echo "==> Actualizar servicio ECS"
+  aws ecs update-service \
+    --cluster "$CLUSTER_NAME" \
+    --service "$SERVICE_NAME" \
+    --task-definition data-ingestion \
+    --force-new-deployment \
+    --region "$REGION" >/dev/null
+fi
+
+echo "==> Esperando task en RUNNING (puede tardar 2-3 min)..."
+for _ in $(seq 1 36); do
+  TASK_ARN=$(aws ecs list-tasks --cluster "$CLUSTER_NAME" --service-name "$SERVICE_NAME" \
+    --desired-status RUNNING --query 'taskArns[0]' --output text 2>/dev/null || true)
+  if [[ -n "$TASK_ARN" && "$TASK_ARN" != "None" ]]; then
+    ENI=$(aws ecs describe-tasks --cluster "$CLUSTER_NAME" --tasks "$TASK_ARN" --output json | \
+      python3 -c "
+import json,sys
+t=json.load(sys.stdin)['tasks'][0]
+for a in t.get('attachments',[]):
+    if a.get('type')=='ElasticNetworkInterface':
+        for d in a.get('details',[]):
+            if d.get('name')=='networkInterfaceId':
+                print(d['value']); raise SystemExit
+")
+    if [[ -n "$ENI" ]]; then
+      PUBLIC_IP=$(aws ec2 describe-network-interfaces --network-interface-ids "$ENI" \
+        --query 'NetworkInterfaces[0].Association.PublicIp' --output text 2>/dev/null || true)
+      if [[ -n "$PUBLIC_IP" && "$PUBLIC_IP" != "None" ]]; then
+        echo ""
+        echo "==> API disponible en: http://${PUBLIC_IP}:8000"
+        echo "    Health: http://${PUBLIC_IP}:8000/health"
+        echo "    Docs:   http://${PUBLIC_IP}:8000/docs"
+        exit 0
+      fi
+    fi
+  fi
+  sleep 5
+done
+
+echo "Servicio desplegado. Obtén la IP con infrastructure/deploy.sh o describe-tasks."

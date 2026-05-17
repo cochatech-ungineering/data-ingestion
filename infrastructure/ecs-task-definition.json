@@ -19,10 +19,8 @@
       ],
       "environment": [
         { "name": "AWS_REGION", "value": "us-east-1" },
-        { "name": "MINIO_ENDPOINT", "value": "s3.us-east-1.amazonaws.com" },
-        { "name": "MINIO_BUCKET", "value": "ingestion-raw" },
-        { "name": "MINIO_SECURE", "value": "true" },
-        { "name": "MINIO_REGION", "value": "us-east-1" },
+        { "name": "S3_BUCKET", "value": "cochatech-data-ingestion-raw-545349726305" },
+        { "name": "DATABASE_SSL_CA", "value": "infrastructure/rds-ca-global.pem" },
         { "name": "SNS_TOPIC_ARN", "value": "arn:aws:sns:us-east-1:545349726305:cashback-ingestion" },
         { "name": "SNS_TOPIC_NAME", "value": "cashback-ingestion" },
         { "name": "PUBLISH_EVENTS", "value": "true" },
@@ -32,15 +30,7 @@
       "secrets": [
         {
           "name": "DATABASE_URL",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:545349726305:secret:data-ingestion/database-url"
-        },
-        {
-          "name": "MINIO_ACCESS_KEY",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:545349726305:secret:data-ingestion/s3-access-key"
-        },
-        {
-          "name": "MINIO_SECRET_KEY",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:545349726305:secret:data-ingestion/s3-secret-key"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:545349726305:secret:data-ingestion/database-url-9UUn4x"
         }
       ],
       "healthCheck": {
@@ -48,7 +38,7 @@
         "interval": 30,
         "timeout": 5,
         "retries": 3,
-        "startPeriod": 60
+        "startPeriod": 90
       },
       "logConfiguration": {
         "logDriver": "awslogs",

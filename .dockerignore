@@ -10,6 +10,7 @@ docs/
 .env
 .env.*
 docker-compose.yml
-infrastructure/
+infrastructure/*
+!infrastructure/rds-ca-global.pem
 migrations/
 scripts/

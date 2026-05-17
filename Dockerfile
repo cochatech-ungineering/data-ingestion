@@ -22,6 +22,7 @@ COPY --from=builder /install /usr/local
 RUN useradd --create-home appuser
 WORKDIR /home/appuser
 COPY ./app ./app
+COPY ./infrastructure/rds-ca-global.pem ./infrastructure/rds-ca-global.pem
 
 USER appuser
 EXPOSE 8000
