@@ -1,0 +1,64 @@
+{
+  "family": "data-ingestion",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::545349726305:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::545349726305:role/data-ingestion-task-role",
+  "containerDefinitions": [
+    {
+      "name": "data-ingestion",
+      "image": "545349726305.dkr.ecr.us-east-1.amazonaws.com/data-ingestion:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "AWS_REGION", "value": "us-east-1" },
+        { "name": "MINIO_ENDPOINT", "value": "s3.us-east-1.amazonaws.com" },
+        { "name": "MINIO_BUCKET", "value": "ingestion-raw" },
+        { "name": "MINIO_SECURE", "value": "true" },
+        { "name": "MINIO_REGION", "value": "us-east-1" },
+        { "name": "SNS_TOPIC_ARN", "value": "arn:aws:sns:us-east-1:545349726305:cashback-ingestion" },
+        { "name": "SNS_TOPIC_NAME", "value": "cashback-ingestion" },
+        { "name": "PUBLISH_EVENTS", "value": "true" },
+        { "name": "ARCHIVE_PUBLISHED_EVENTS", "value": "false" },
+        { "name": "EVENT_CHUNK_SIZE", "value": "500" }
+      ],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:545349726305:secret:data-ingestion/database-url"
+        },
+        {
+          "name": "MINIO_ACCESS_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:545349726305:secret:data-ingestion/s3-access-key"
+        },
+        {
+          "name": "MINIO_SECRET_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:545349726305:secret:data-ingestion/s3-secret-key"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/data-ingestion",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}
