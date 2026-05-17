@@ -1,12 +1,21 @@
 # Persistencia de datos: qué guardar y dónde
 
-Este servicio **no persiste** transacciones en base de datos: limpia, valida y publica eventos. La persistencia ocurre en los consumidores del bus.
+Este servicio usa **dos almacenes**:
+
+| Almacén | Contenido |
+|---------|-----------|
+| **MinIO** | Archivo crudo subido por el usuario (CSV, XLS, XLSX, JSON, TXT) |
+| **PostgreSQL** | Job de ingesta, hash de contenido (anti-duplicados), estado del pipeline y metadatos para reintentos |
+
+Los estados del job en Postgres son: `received` → `stored` → `converting` → `processing` → `publishing` → `completed` (o `failed` con `error_stage` y `error_message`).
+
+Reintento: `POST /api/v1/ingest/jobs/{id}/retry` descarga el objeto desde MinIO usando `minio_object_key` y vuelve a ejecutar el pipeline.
 
 ## Responsabilidades por capa
 
-| Capa | Responsabilidad | Persistencia recomendada |
-|------|-----------------|---------------------------|
-| Ingesta (este repo) | Limpieza + contrato JSON + publicación | Solo logs / opcional object storage del CSV crudo |
+| Capa | Responsabilidad | Persistencia |
+|------|-----------------|--------------|
+| Ingesta (este repo) | Crudo en MinIO + estado en Postgres + eventos | MinIO + PostgreSQL |
 | Motor de cashback | Agregación mensual, niveles, reintegros | PostgreSQL (Supabase) |
 | Reportes operativos | Export BanexTransfer | Object storage (S3/MinIO) o filesystem |
 
@@ -46,7 +55,7 @@ Guardar el archivo original subido permite:
 
 ## Por qué no guardar todo en el mensaje del bus
 
-Los eventos llevan lotes para procesamiento en tiempo casi real. La **fuente de verdad** debe ser la base del motor de cashback, no RabbitMQ (retención limitada).
+Los eventos llevan lotes para procesamiento en tiempo casi real. La **fuente de verdad** debe ser la base del motor de cashback, no SQS (retención limitada).
 
 ## Supabase / Postgres
 

@@ -14,6 +14,16 @@ class FileType(str, Enum):
     TRANSFERS = "transfers"
 
 
+class IngestionJobStatus(str, Enum):
+    RECEIVED = "received"
+    STORED = "stored"
+    CONVERTING = "converting"
+    PROCESSING = "processing"
+    PUBLISHING = "publishing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class QrPaymentTransaction(BaseModel):
     quote_number: int
     transaction_id: str
@@ -90,6 +100,7 @@ class TransfersIngestionCompletedEvent(BaseModel):
 
 class IngestionResponse(BaseModel):
     report_id: UUID
+    job_status: IngestionJobStatus | None = None
     file_type: FileType
     source_file: str
     validation: QrStatusValidationReport | None = None
@@ -97,3 +108,5 @@ class IngestionResponse(BaseModel):
     events_published: int
     events_archive_dir: str | None = None
     sample_transactions: list[dict] | None = None
+
+

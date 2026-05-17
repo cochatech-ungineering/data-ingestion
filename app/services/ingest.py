@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from uuid import UUID
 
@@ -18,6 +19,7 @@ async def ingest_qr_file(
     report_id: UUID | None = None,
     publish: bool = True,
     strict_status: bool = True,
+    on_publishing: Callable[[], Awaitable[None]] | None = None,
 ) -> IngestionResponse:
     transactions, stats, batches, completed, validation = clean_qr_payments(
         source,
@@ -30,6 +32,8 @@ async def ingest_qr_file(
     events_published = 0
     archive_dir: str | None = None
     if publish and settings.publish_events:
+        if on_publishing is not None:
+            await on_publishing()
         for batch in batches:
             await publisher.publish("qr.transactions.batch", batch)
             events_published += 1
@@ -41,6 +45,7 @@ async def ingest_qr_file(
     sample = [preview_model(tx) for tx in transactions[:3]] if transactions else None
     return IngestionResponse(
         report_id=completed.report_id,
+        job_status=None,
         file_type=FileType.QR_PAYMENTS,
         source_file=completed.source_file,
         validation=validation,
@@ -57,6 +62,7 @@ async def ingest_transfers_file(
     source_file: str | None = None,
     report_id: UUID | None = None,
     publish: bool = True,
+    on_publishing: Callable[[], Awaitable[None]] | None = None,
 ) -> IngestionResponse:
     transfers, stats, report_id = clean_transfers(source, report_id=report_id)
     completed = TransfersIngestionCompletedEvent(
@@ -69,6 +75,8 @@ async def ingest_transfers_file(
     events_published = 0
     archive_dir: str | None = None
     if publish and settings.publish_events:
+        if on_publishing is not None:
+            await on_publishing()
         await publisher.publish("transfers.ingestion.completed", completed)
         events_published = 1
         if settings.archive_published_events:
@@ -77,6 +85,7 @@ async def ingest_transfers_file(
     sample = [preview_model(tx) for tx in transfers[:3]] if transfers else None
     return IngestionResponse(
         report_id=report_id,
+        job_status=None,
         file_type=FileType.TRANSFERS,
         source_file=completed.source_file,
         stats=stats,

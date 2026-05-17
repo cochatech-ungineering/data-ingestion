@@ -4,6 +4,20 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# JSON archivados tras publicación exitosa en RabbitMQ
+# AWS CLI instalado localmente (usar aws login / apt / brew)
+aws/
+awscliv2.zip
+
+# JSON archivados tras publicación exitosa en SNS
 events/published/*
 !events/published/.gitkeep
+
+# Infra generada por scripts/provision_sns_sqs.sh
+infrastructure/sns-sqs.env
+
+# Binarios / artefactos en data/
+data/*.deb
+data/*.zip
+
+# RabbitMQ legacy (bus = SNS/SQS en AWS)
+docker/rabbitmq/
