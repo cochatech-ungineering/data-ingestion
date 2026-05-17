@@ -15,6 +15,7 @@ events/published/*
 # Infra generada por scripts/provision_sns_sqs.sh
 infrastructure/sns-sqs.env
 infrastructure/aws-data.env
+infrastructure/https-endpoints.env
 infrastructure/rds-master-password.txt
 
 # Binarios / artefactos en data/

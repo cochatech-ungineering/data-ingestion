@@ -171,4 +171,8 @@ for a in t.get('attachments',[]):
   sleep 5
 done
 
-echo "Servicio desplegado. Obtén la IP con infrastructure/deploy.sh o describe-tasks."
+if [[ "${SETUP_HTTPS:-true}" == "true" ]] && [[ -x infrastructure/setup-https.sh ]]; then
+  ./infrastructure/setup-https.sh
+else
+  echo "Servicio desplegado. Para HTTPS: ./infrastructure/setup-https.sh"
+fi
