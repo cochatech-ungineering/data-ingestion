@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://banexcoin.local/contracts/qr_ingestion_events.v1.json",
+  "title": "QrIngestionEvents",
+  "description": "Eventos publicados al bus tras limpiar un reporte mensual de pagos QR.",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["schema_version", "event_type", "report_id", "source_file", "batch_index", "batch_count", "transactions"],
+      "properties": {
+        "schema_version": { "type": "string", "const": "1.0.0" },
+        "event_type": { "type": "string", "const": "qr_transactions_batch" },
+        "report_id": { "type": "string", "format": "uuid" },
+        "source_file": { "type": "string" },
+        "batch_index": { "type": "integer", "minimum": 0 },
+        "batch_count": { "type": "integer", "minimum": 1 },
+        "transactions": {
+          "type": "array",
+          "items": { "$ref": "qr_payment_transaction.v1.json" }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schema_version", "event_type", "report_id", "source_file", "file_type", "stats", "published_batches"],
+      "properties": {
+        "schema_version": { "type": "string", "const": "1.0.0" },
+        "event_type": { "type": "string", "const": "qr_ingestion_completed" },
+        "report_id": { "type": "string", "format": "uuid" },
+        "source_file": { "type": "string" },
+        "file_type": { "type": "string", "const": "qr_payments" },
+        "stats": {
+          "type": "object",
+          "required": ["total_records", "unique_users"],
+          "properties": {
+            "total_records": { "type": "integer", "minimum": 0 },
+            "total_amount_bob": { "type": "number", "minimum": 0 },
+            "total_amount_usdt": { "type": "number", "minimum": 0 },
+            "unique_users": { "type": "integer", "minimum": 0 },
+            "period_start": { "type": "string", "format": "date-time" },
+            "period_end": { "type": "string", "format": "date-time" }
+          }
+        },
+        "published_batches": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

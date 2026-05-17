@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://banexcoin.local/contracts/qr_payment_transaction.v1.json",
+  "title": "QrPaymentTransaction",
+  "description": "Transacción individual de pago QR limpia, lista para el motor de cashback.",
+  "type": "object",
+  "required": [
+    "quote_number",
+    "transaction_id",
+    "user_alias",
+    "account_number",
+    "status",
+    "amount_bob",
+    "amount_usdt",
+    "exchange_rate",
+    "commission_usdt",
+    "created_at",
+    "service_code"
+  ],
+  "properties": {
+    "quote_number": { "type": "integer", "minimum": 1 },
+    "transaction_id": { "type": "string", "minLength": 1 },
+    "user_alias": { "type": "string", "minLength": 1 },
+    "account_number": { "type": "string", "pattern": "^[0-9]+$" },
+    "status": { "type": "string", "const": "completed" },
+    "amount_bob": { "type": "number", "minimum": 0 },
+    "amount_usdt": { "type": "number", "minimum": 0 },
+    "exchange_rate": { "type": "number", "exclusiveMinimum": 0 },
+    "commission_usdt": { "type": "number", "minimum": 0 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "service_code": { "type": "string", "const": "S-001" }
+  },
+  "additionalProperties": false
+}
